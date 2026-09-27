@@ -11,3 +11,4 @@ dist/
 *.db
 *.sqlite
 .claudeignore
+CLAUDE.md
