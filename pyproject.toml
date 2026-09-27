@@ -1,0 +1,108 @@
+[project]
+name = "app"
+version = "0.1.0"
+description = "High-performance FastAPI REST API template"
+authors = [
+    { name = "Shreetej", email = "shreetejghodekar@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "alembic>=1.20.0",
+    "asyncpg>=0.31.0",
+    "clickhouse-connect[async]>=1.9.0",
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "orjson>=3.12.0",
+    "prometheus-fastapi-instrumentator>=8.1.0",
+    "pydantic-settings>=2.15.0",
+    "redis[hiredis]>=8.1.0",
+    "sqlalchemy[asyncio]>=2.1.1",
+    "structlog>=26.1.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+serve = "app.server:run"
+
+[build-system]
+requires = ["uv_build>=0.11.29,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "aiosqlite>=0.22.1",
+    "asgi-lifespan>=2.1.0",
+    "basedpyright>=1.40.1",
+    "locust>=2.46.6",
+    "mypy>=2.3.1",
+    "pre-commit>=4.6.2",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.9",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F", "I", "N", "UP", "B", "A", "C4", "SIM", "RET", "PTH",
+    "ASYNC",  # blocking calls inside async functions
+    "S",      # bandit security checks
+    "BLE", "PERF", "RUF", "ANN", "TC", "PL",
+]
+ignore = ["PLR0913", "PLR2004", "TC001", "TC002", "TC003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "ANN401", "PLR2004"]
+"migrations/**" = ["INP001"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["src", "tests", "migrations"]
+
+[[tool.mypy.overrides]]
+module = ["asgi_lifespan.*", "asyncpg.*"]
+ignore_missing_imports = true
+
+# Pyright ships newer typeshed than mypy: it catches stdlib deprecations mypy misses
+# (same engine as VS Code's Pylance, so editor and CI agree).
+[tool.basedpyright]
+include = ["src", "tests", "migrations", "loadtest"]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+reportDeprecated = "error"
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra --strict-markers --strict-config"
+filterwarnings = ["error"]
+markers = ["integration: needs docker compose services (postgres, redis, clickhouse)"]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+concurrency = ["greenlet", "thread"]
+omit = ["src/app/__main__.py", "src/app/server.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

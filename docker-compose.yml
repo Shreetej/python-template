@@ -1,0 +1,93 @@
+x-app-env: &app-env
+  APP_ENVIRONMENT: production
+  APP_DATABASE_URL: postgresql+asyncpg://app:app@postgres:5432/app
+  APP_REDIS_URL: redis://redis:6379/0
+  APP_CLICKHOUSE_URL: http://api:api@clickhouse:8123/default
+  APP_LOG_JSON: "true"
+
+services:
+  api:
+    build: .
+    environment:
+      <<: *app-env
+      APP_WORKERS: "4"
+      # 4 workers * (10 + 10) = 80 max connections, under max_connections=200.
+      APP_DB_POOL_SIZE: "10"
+      APP_DB_MAX_OVERFLOW: "10"
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
+
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      <<: *app-env
+      APP_METRICS_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=256MB
+    ports:
+      # Override if a local Postgres already owns 5432: POSTGRES_HOST_PORT=5433
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    # Pure cache: bounded memory, LRU eviction, no persistence.
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.8-alpine
+    environment:
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+      CLICKHOUSE_PASSWORD: ""
+    ports:
+      - "8123:8123"
+    volumes:
+      - chdata:/var/lib/clickhouse
+      - ./docker/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:
+  chdata:
